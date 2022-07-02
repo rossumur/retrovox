@@ -1,0 +1,5 @@
+5 REM -- Welcome to
+6 REM -- the Matrix
+7 REM -- 1975
+10 pr" ";rnd(10000);rnd(10000);rnd(10000);rnd(10000);rnd(10000);rnd(100)
+20 goto 10

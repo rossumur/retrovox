@@ -1,0 +1,9 @@
+#N David Hilbert
+#C A period-23 oscillator found by Luka Okanishi on November 24, 2019
+#C based on a partial result by Aidan F. Pierce.
+x = 33, y = 26, rule = B3/S23
+7b2o15b2o$8bo15bo$6bo19bo$6b5o11b5o$10bo11bo$4b4o17b4o$4bo2bo17bo2bo$
+21bo$21bo$9bo4b2ob2o2bob2o$8b3o3b2obo6b2o$7bo2b2o6bo$7b3o12bo$22bobo$
+3b2o11b2o4bo2bo2b2o$3bo12b2o5b2o4bo$2obo12b2o11bob2o$ob2ob2o19b2ob2obo
+$5bo21bo$5bobo17bobo$6b2o17b2o$10bo11bo$6b5o11b5o$6bo19bo$8bo15bo$7b2o
+15b2o!

@@ -1,0 +1,9 @@
+10 PR"     o       o     "
+11 PR"      o     o      "
+12 PR"     ooooooooo     "
+13 PR"    oo ooooo oo    "
+14 PR"   ooooooooooooo   "
+15 PR"   o ooooooooo o   "
+16 PR"   o oo     oo o   "
+17 PR"      ooo ooo      "
+18 PR:PR

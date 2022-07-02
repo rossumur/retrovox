@@ -1,0 +1,17 @@
+10 CLS:PR
+11 SAM"[p64,s100,m180,t180]greetings-"
+12 PR"GREETINGS"
+20 SAM"professor fallken -"
+21 PR"PROFESSOR FALKEN":PR:PR
+31 PR"HELLO":PR:PR
+32 SAM"HELLO"
+40 SAM"ah strange gayme."
+41 PR"A STRANGE GAME."
+50 SAM"the only win ning move"
+51 PR"THE ONLY WINNING MOVE"
+60 SAM"is not to play."
+61 PR"IS NOT TO PLAY.":PR
+70 SAM"how about a nice"
+71 PR"HOW ABOUT A NICE"
+80 SAM"gayme of chess."
+81 PR"GAME OF CHESS?"

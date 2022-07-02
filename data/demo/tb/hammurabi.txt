@@ -1,0 +1,100 @@
+1 D=0:E=0:G=2800:I=5:L=1000:P=100:R=200:T=1:Y=3
+2 PRINT "Try your hand at"
+3 PRINT "governing Sumeria" : PRINT "for ten year term!" : PRINT ""
+5 PRINT "Hammurabi,"
+6 PRINT "I beg to report to you;"
+7 PRINT "In year ";T;", ";D;" people"
+8 PRINT "starved, and ";I;" came"
+10 PRINT "to the city."
+11 PRINT "You harvested ";Y;" bushels"
+12 PRINT "of grain per acre."
+13 PRINT "Rats destroyed ";R : PRINT "bushels."
+15 PRINT "Population is now ";P;","
+16 PRINT "and the city owns"
+17 PRINT L;" acres of land."
+18 PRINT "You have ";G;" bushels"
+19 PRINT "of grain in store."
+20 IF D>P*45/100 GOTO 100
+21 IF T=11 GOTO 90
+22 LET V=16+RND(10)
+23 PRINT "Land is trading at ";V
+24 PRINT "bushels per acre."
+25 PRINT "How many acres do you"
+26 PRINT "wish to buy (0-";G/V;")"
+27 INPUT B
+28 IF B>G/V GOTO 25
+29 IF B>0 GOTO 37
+30 REM --- Sell land
+31 PRINT "How many acres do you"
+32 PRINT "wish to sell (0-";L;")"
+33 INPUT B
+34 IF B>L GOTO 31
+35 LET B=-B
+36 REM --- Feed the people
+37 PRINT "How many bushels to"
+38 PRINT "feed the people (0-";G-B*V;")"
+41 INPUT F
+42 IF F>=0 IF F<=G-B*V GOTO 45
+43 GOTO 37
+44 REM --- Plant with seed
+45 LET M=(G-F-B*V)
+46 IF 10*P<M LET M=10*P
+47 IF L+B<M LET M=L+B
+48 PRINT "How many acres do you"
+49 PRINT "wish to plant (0-";M;")"
+50 INPUT S
+51 IF S>M GOTO 48
+53 REM --- Work out the result
+54 LET L=L+B
+55 LET G=G-B*V-F-S/2
+56 REM Yield
+58 LET Y=RND(5)
+59 REM Rats
+61 LET A=RND(5)
+62 LET R=0
+63 IF A>2 GOTO 70
+65 IF G>0 LET R=RND(G)
+69 REM Recalculate grain
+70 LET G=G+S*Y-R
+71 IF G<0 LET G=0
+72 REM Immigration/Birth
+74 LET A=RND(5)
+75 LET I=A*(L+S/20)/P/5+1
+76 REM Feeding the people
+77 LET D=0
+78 IF P<=F/20 GOTO 80
+79 LET D=P-F/20 : LET E=((T-1)*E+(100*D/P))/(T+1)
+80 LET P=P-D+I
+81 IF P<=0 GOTO 210
+82 LET T=T+1
+83 REM Back to report
+84 PRINT ""
+85 GOTO 5
+86 REM --- Evaluation
+90 PRINT "" : PRINT "Your reign ends" : PRINT "after ";T-1;" years."
+91 PRINT "You leave your city" : PRINT "with ";P;" people."
+92 PRINT "You have ";L;" acres" : PRINT "of land to support them."
+93 PRINT G;" bushels of grain" : PRINT "remain in store."
+94 PRINT ""
+95 IF E<=3 IF L/P>=10 GOTO 110
+96 IF E<=10 IF L/P>=9 GOTO 120
+97 IF E<=33 IF L/P>=7 GOTO 130
+99 REM --- Terrible performance - including premature end
+100 PRINT "Your performance has" : PRINT "been so terrible that"
+101 PRINT "you were driven from" : PRINT "your throne after only" : PRINT T;" years!"
+102 END
+109 REM --- Best performance
+110 PRINT "Your expert" : PRINT "statesmanship is worthy" : PRINT "of Hammurabi himself!"
+111 PRINT "The city will honor" : PRINT "your memory for all" : PRINT "of eternity!"
+112 END
+119 REM --- Average performance
+120 PRINT "Your competent rule is" : PRINT "appreciated by your" : PRINT "citizens."
+121 PRINT "They will remember you" : PRINT "fondly for some time" : PRINT "to come."
+122 END
+129 REM --- Poor performance
+130 PRINT "Your mismanagement left" : PRINT "your city in a very" : PRINT "poor state."
+131 PRINT "Your incompetence and" : PRINT "oppression will not be" : PRINT "missed by your people."
+132 END
+209 REM --- Everybody starved
+210 PRINT "You have starved" : PRINT "your entire kingdom" : PRINT "to death!"
+211 END

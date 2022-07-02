@@ -1,0 +1,36 @@
+10 PRINT "Roshambo!"
+30 PRINT "How many games?"
+31 INPUT Q
+40 IF Q<11 GOTO 60
+50 PRINT Q;" seems like a lot. Choose fewer?" : GOTO 30
+60 PRINT ""
+70 PRINT "Game number ";G
+80 X=RND(3)
+90 PRINT "3=Rock...":PRINT "2=Scissors...":PRINT "1=Paper": PRINT "What's your choice?"
+100 INPUT K
+110 IF (K-1)*(K-2)*(K-3)=0 GOTO 120
+111 PRINT "Must choose 1,2 or 3.." : GOTO 90
+120 PRINT "This was my choice..."
+130 IF X=2 GOTO 150
+131 IF X=3 GOTO 160
+140 PRINT "...Paper!":GOTO 170
+150 PRINT "...Scissors!":GOTO 170
+160 PRINT "...Rock!"
+170 IF X=K GOTO 250
+180 IF X>K GOTO 230
+190 IF X=1 GOTO 210
+200 PRINT "You Win!!!":H=H+1:GOTO 260
+210 IF K<>3 GOTO 200
+220 PRINT "Wow! I Win!!!":C=C+1:GOTO 260
+230 IF K<>1 GOTO 220
+231 IF X<>3 GOTO 220
+240 GOTO 200
+250 PRINT "Tied game, no winner!"
+260 G=G+1
+261 IF G<>Q GOTO 70
+270 PRINT "": PRINT "Here is the final score:"
+280 PRINT "I won ";C;" game(s),"
+290 PRINT "You won ";H;" game(s),"
+300 PRINT "and ";Q-(C+H);" game(s)":PRINT "ended in a tie."
+310 PRINT "": PRINT "Thanks for playing!!"
+320 END

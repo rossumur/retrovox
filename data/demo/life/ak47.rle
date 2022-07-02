@@ -1,0 +1,12 @@
+#C Period-94 gun and period-33 oscillator
+#C
+#C Found by Bellman, a search program by Mike Playle
+x = 88, y = 27, rule = B3/S23
+13b2o7bo57b2o4bo$5bo7b2o5b3o6b2o49bobo2bobo$5b3o11bo9bo51bo4bo$8bo10b
+2o6bobo$7b2o18b2o$16b3o50b3o7b2o$15bo3bo50bob2o4bo2b2o$14bo5bo47bobob
+2o4b2ob2o$2b2ob2o7bo5bo47bo3bo$o2bob2o7bo5bo14b2o30b3o2bo4bob2o$2obo
+11bo3bo10b2o2bo2bo32b2o$3bo12b3o11bobo2b2o30b2o10b2o$3b2o28b2o30b2o10b
+2o$b2o2bobo26bo39b2o$o2bo2b2o26bob2o27b2obo4bo2b3o$b2o28b2obo2bo35bo3b
+o$31b2ob2o27b2ob2o4b2obobo$63b2o2bo4b2obo$65b2o7b3o2$29b2o$17b2o10bo
+29bo4bo$18bo11b3o25bobo2bobo$15b3o5b2o7bo26bo4b2o$5bobo7bo7b2o$5b2o$6b
+o!

@@ -1,0 +1,35 @@
+1 REM Tiny Basic Lander
+2 A=1000:B=0:F=150:V=50:T=0
+29 CLS : PRINT "   Tiny Basic Lander" : PRINT
+30 PRINT "   __________________"
+31 PRINT "  /                  \"
+50 PRINT "   Time:     [";T;"]"
+51 PRINT "   Altitude: [";A;"]"
+52 PRINT "   Velocity: [";V;"]"
+53 PRINT "   Fuel:     [";F;"]"
+54 PRINT "   Thrust:   [";B;"]"
+55 PRINT "  \__________________/"
+56 PRINT ""
+57 IF A>0 GOTO 111
+58 END
+111 IF F>30 THEN PRINT "Thrust (0-30)"
+112 IF F<31 THEN PRINT "Thrust (0-";F;")"
+113 INPUT B
+114 IF B>=0 THEN IF B<=30 THEN IF B<=F THEN GOTO 120
+115 GOTO 111
+120 LET W=V-B+5
+121 LET F=F-B
+122 LET A=A-(V+W)/2
+123 LET V=W
+124 LET T=T+1
+125 IF A>0 THEN GOTO 29
+126 IF V<5 THEN GOTO 140
+127 PRINT "You crashed! Oh dear.."
+128 GOTO 160
+140 IF A<0 THEN GOTO 150
+141 PRINT "Perfect landing!"
+142 GOTO 160
+150 PRINT "Touchdown!"
+160 IF A<0 THEN LET A=0
+161 GOTO 30
+162 END
