@@ -1,0 +1,1241 @@
+
+	processor 6502
+        include "vcs.h"
+        include "macro.h"
+        include "xmacro.h"
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;
+; This example uses the 48-pixel retriggering method to display
+; a six-digit scoreboard.
+;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+        seg.u Variables
+	org $80
+
+;		4 bytes of data for yeet in, out
+YeetData	hex 00000000
+
+Out		.byte
+Temp		.byte
+Frames		.byte
+LastN		.byte
+background	.byte
+LoopCount	.byte ; counts scanline when drawing
+
+YBUF		.ds 15
+CHA		.ds 30
+
+; Pointers to bitmap for each digit
+Digit0		.word
+Digit1		.word
+Digit2		.word
+Digit3		.word
+Digit4		.word
+Digit5		.word
+
+BCDScore	hex 000000
+
+
+THREE_COPIES    equ %011 ; for NUSIZ registers
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+	seg Code
+        org $f000
+
+Start
+	CLEAN_START
+	jmp YeetShell
+        
+NextFrame
+	VERTICAL_SYNC
+        lda background
+        sta COLUBK
+
+	TIMER_SETUP 37
+        lda #$18
+        sta COLUP0
+        lda #$28
+        sta COLUP1
+        lda #THREE_COPIES
+        sta NUSIZ0
+        sta NUSIZ1
+        
+; set horizontal position of player objects
+        sta WSYNC
+        SLEEP 26
+        sta RESP0
+        sta RESP1
+        lda #$11
+        sta HMP1
+        sta WSYNC
+        sta HMOVE
+        sta HMCLR
+        lda #1
+        sta VDELP0
+        sta VDELP1
+        TIMER_WAIT
+
+	TIMER_SETUP 192
+
+	jsr GetDigitPtrs	; get pointers
+        jsr DrawDigits		; draw digits
+	jsr spi
+        
+        lda #$AA
+        jsr serial_byte
+        lda #$55
+        jsr serial_byte
+	lda #$69
+        jsr serial_byte
+	lda #$96
+        jsr serial_byte
+ 	lda #$F0
+        jsr serial_byte
+        lda #$0F
+        jsr serial_byte
+        
+        ;TIMER_WAIT
+.waittimer
+        lda INTIM
+        bne .waittimer
+        sta WSYNC
+
+	TIMER_SETUP 29
+        lda #$01
+        ldx #$00
+        ldy #$00
+       ; jsr AddScore
+        TIMER_WAIT
+       ; jmp NextFrame
+        
+;================================================================
+;================================================================
+;	TODO
+
+        ALIGN 256
+Nyb
+       	hex 00102030405060708090A0B0C0D0E0F0
+       	hex 00102030405060708090A0B0C0D0E0F0
+       	hex 00102030405060708090A0B0C0D0E0F0
+       	hex 00102030405060708090A0B0C0D0E0F0
+        
+;================================================================
+;================================================================
+;	YeetShell
+
+YeetShell SUBROUTINE
+	lda #0
+        sta SWACNT	; all input
+        
+	VERTICAL_SYNC
+        TIMER_SETUP 28
+        
+        lda #$00
+        sta COLUBK
+        lda #69
+        sta COLUPF
+	lda #$31
+        sta CTRLPF
+        
+        lda #$0E
+        sta COLUP0
+        sta COLUP1
+        lda #6
+        sta NUSIZ0
+        sta NUSIZ1
+        
+        TIMER_WAIT
+        ldx #0
+        sta VBLANK
+        
+        inc Frames
+        lda YeetData	; dmode dispatch
+        cmp #1
+        bne .1
+        jmp Playfield32x192
+.1	cmp #3
+	bne .0
+        jmp Graphics96x96
+.0      jmp Text24x24
+
+NotConnected
+	TIMER_SETUP 9
+      	TIMER_WAIT
+	lda #$80
+        sta COLUBK
+	TIMER_SETUP 192
+	TIMER_WAIT
+
+Next
+        TIMER_SETUP 29
+        ldx #2
+        sta VBLANK
+        TIMER_WAIT
+        
+	jmp YeetShell
+
+;================================================================
+;================================================================
+;	YeetInit
+
+YeetInit SUBROUTINE
+	lda Frames
+        sta YeetData
+        
+	lda #%00001011
+        and SWCHB	; color,x,select,reset
+        ldx INPT4
+        bpl .f
+        ora #%00000100
+.f	tay		; color,fire,select,reset
+	lda SWCHA
+        sta Temp	; high byte is joystick
+	
+	ldx #$0F	; start Yeet sequence READY + SERIAL
+       	lda Frames	; 
+        and #1		; Field indicator in D0
+	sta WSYNC	; timing ref is relative to this WSYNC
+       	sta.w HMOVE	; position sprites
+       	sta SWCHA	; READY=0 - init yeet mode
+	stx SWACNT	; Set READY to output
+
+	; wait for ESP32 interrupt
+	lda Temp	; from above
+        lsr
+        lsr
+        lsr
+        stx SWCHA	; READY=1
+        
+       	; output phase - write 4 nybbles at 8 clock intervals
+        
+        lsr
+        sta SWCHA	; joystick 4
+        lax.w YeetData
+        sty SWCHA	; color,fire,select,reset
+        
+        lsr
+        lsr
+        stx SWCHA	; low of YeetOut
+        lsr
+        lsr
+        sta SWCHA	; high of YeetOut
+        
+        nop
+        lda #$F0	; low bits are set to input
+	sta SWACNT	; all input at this stage
+        
+        ; input phase - load 4 yeet info bytes
+        
+        ldy #3		; 2
+.data	ldx SWCHA	; 4 -> starts at TREF_START + 2
+        lda Nyb,x	; 4
+        ora SWCHA	; 4
+        sta YeetData,y	; 5
+        dey		; 2
+        bpl .data	; 3/2 Total loop is (4*22)-1
+	; 32 + (4*22)-1
+
+setv	rts
+        
+;================================================================
+;================================================================
+;	Playfield32x192
+
+Playfield32x192	SUBROUTINE
+
+	sta WSYNC	; 262
+	sta WSYNC
+	sta WSYNC
+	sta WSYNC
+        
+	jsr YeetInit
+        
+	; now yeeting pixels
+       	ldy #192/2        
+        lda YeetData+3	; use yeet color info (first byte transferred)
+       	sleep 61
+        sta COLUPF
+
+yeet_pf	; even
+	ldx SWCHA	; WSYNC/H-65
+	lda Nyb,x
+        ora SWCHA
+	sta PF1		; 0
+
+	ldx SWCHA
+	lda Nyb,x
+        ora SWCHA
+        sta PF2		; 1
+        
+        ldx SWCHA
+	lda Nyb,x
+        ora SWCHA
+        ldx SWCHA
+        sta PF2		; 2 at cycle 45/H73
+        
+	lda Nyb,x
+        ora SWCHA
+        sta PF1		; 3
+        
+        ; setup color for odd
+        sleep 10
+        lda YeetData+2	; COLOR 1
+        sta COLUPF
+        
+        ; odd
+        ldx SWCHA	; WSYNC/H-65
+	lda Nyb,x
+        ora SWCHA
+	sta PF1		; 0
+
+	ldx SWCHA
+	lda Nyb,x
+        ora SWCHA
+        sta PF2		; 1
+        
+        ldx SWCHA
+	lda Nyb,x
+        ora SWCHA
+        ldx SWCHA
+        sta PF2		; 2 at cycle 45/H73
+        
+	lda Nyb,x
+        ora SWCHA
+        sta PF1		; 3
+	
+        ; setup color for even
+        sleep 5
+       	lda YeetData+3
+        sta COLUPF	;
+        
+	dey		;
+        bne yeet_pf	; !
+        
+        lda #0
+        sta WSYNC
+        sta PF1
+        sta PF2
+        jmp Next
+    	
+;================================================================
+;================================================================
+
+	; Graphics96x96
+        ; 96x96 bitmap
+        ; funny ordering
+        ; even 	4,6,8,10  0,2
+        ; odd 	5,7,9,11  1,3
+        
+        ALIGN 256
+Graphics96x96 SUBROUTINE
+      	lda #0
+        sta COLUBK
+        sta COLUPF
+        lda #$0F
+        sta PF1
+        lda #$FF
+        sta PF2
+        
+       	sta WSYNC	; pad to 262 lines
+	sta WSYNC
+        
+        ; two lines of setup to prep sprites
+	lda #32
+        ldx #0
+        jsr SetHorizPos
+        lda #(32+16)
+        ldx #1
+        jsr SetHorizPos
+        
+        jsr YeetInit
+        
+        ldy #192/2
+        lda YeetData+3
+        sta COLUP0	; FG
+        sta COLUP1
+        lda YeetData+2
+        sta COLUPF	; BG
+        
+	lda Frames
+        ror
+        bcc even_
+        bcs odd_
+        
+loop00	SUBROUTINE
+
+        ; both move left 8
+        sta HMCLR	; move p0,p1 left 8
+	sta HMOVE	; stats at 70, move complete at 73
+        
+even_	; line 0 - blank
+	sta WSYNC	; 3 free
+        sleep 3		; 3 free, align timing
+        lda #0
+        sta GRP0	; clear p0
+        sta GRP1	; clear p1
+        
+        ; load 4 - 60
+        ldx SWCHA	; TREF_BLANK
+        lda Nyb,x
+        ora SWCHA
+        sta YBUF+0
+        
+ 	ldx SWCHA
+        lda Nyb,x
+        ora SWCHA
+        sta YBUF+1
+        
+        ldx SWCHA
+        lda Nyb,x
+        ora SWCHA
+        sta YBUF+2
+        
+        ldx SWCHA
+        lda Nyb,x
+        ora SWCHA
+        sta YBUF+3
+        
+        ; line 1 - visible
+        sta WSYNC	; 5 free
+        
+        ldx SWCHA
+        lda Nyb,x
+        ora SWCHA
+        sta GRP0
+        
+ 	ldx SWCHA
+        lda Nyb,x
+        ora SWCHA
+        sta GRP1
+        
+        sleep 4
+       	lda YBUF+0
+        sta GRP0
+        lda YBUF+1
+        sta GRP1
+        lda YBUF+2
+        sta GRP0
+        lda YBUF+3
+        sta GRP1
+        
+        dey
+        bne odd_
+        beq .done
+        
+odd_	lda #$80
+	sta HMP0
+        sta HMP1
+        
+        ; line 2 - blank
+	sta WSYNC	; 3 free
+       	sta HMOVE	; move both right 8
+        
+        lda #0
+        sta GRP0	; clear p0
+        sta GRP1	; clear p1
+        
+        ; load 4 - 60
+        ldx SWCHA	; TREF_BLANK
+        lda Nyb,x
+        ora SWCHA
+        sta YBUF+0
+        
+ 	ldx SWCHA
+        lda Nyb,x
+        ora SWCHA
+        sta YBUF+1
+        
+        ldx SWCHA
+        lda Nyb,x
+        ora SWCHA
+        sta YBUF+2
+        
+        ldx SWCHA
+        lda Nyb,x
+        ora SWCHA
+        sta YBUF+3
+        
+        ; line 3
+	sta WSYNC	; 7 free
+        
+        ldx SWCHA
+        lda Nyb,x
+        ora SWCHA
+        sta GRP0
+        
+ 	ldx SWCHA
+        lda Nyb,x
+        ora SWCHA
+        sta GRP1
+        
+        sleep 4
+       	lda YBUF+0
+        sta GRP0
+        lda YBUF+1
+        sta GRP1
+        lda YBUF+2
+        sta GRP0
+        lda YBUF+3
+        sta GRP1
+        sleep 2
+        
+        dey
+        beq .done
+        jmp loop00
+        
+.done	lda #0
+        sta GRP0
+        sta GRP1
+        jmp Next
+
+;================================================================
+;================================================================
+;	5x3 font text mode (3 blank + 5 lines of font)
+;	24 lines (in 192)
+
+        ALIGN 256
+Text24x24	SUBROUTINE
+      	lda #0
+        sta COLUBK
+        sta COLUPF
+        
+        lda #$7F
+        sta PF1		; 0
+        lda #$FF
+        sta PF2		; 0
+        
+        ; two lines of setup to prep sprites
+	
+        lda Frames
+        ror
+        bcs .init_odd
+        
+.init_even
+	lda #33
+        jsr pos_sprite
+        clv
+        jmp .begin
+        
+.init_odd
+	lda #41
+	jsr pos_sprite
+        bit setv	; TODO: SetHorizPos clears overflow!
+
+.begin
+        jsr YeetInit
+        
+        ; start blitting text...
+        ldy #192/8	; H 67
+        sty Temp
+        
+        lda YeetData+3	; colors FG/BG
+        sta COLUP0	; FG
+        sta COLUP1
+        lda YeetData+2
+        sta COLUPF	; BG
+       	sleep 37	;
+
+._loop
+	lda #$0		; H 127
+        sta GRP0	; H 133
+        sta GRP1
+        
+        ; load 15 bytes
+	ldx SWCHA	; H 151
+        lda Nyb,x
+        ora SWCHA	; H -53
+        sta YBUF+0
+        
+        ldx SWCHA	; H -32
+        lda Nyb,x
+        ora SWCHA	; H -8
+        sta YBUF+1
+        
+        ldx SWCHA	; H 13
+        lda Nyb,x
+        ora SWCHA	; H 37
+        sta YBUF+2
+        
+        ldx SWCHA	; H 58
+        lda Nyb,x
+        ora SWCHA	; H 82
+        sta YBUF+3
+        
+        ldx SWCHA	; H 103
+        lda Nyb,x
+        ora SWCHA	; H 127
+        sta YBUF+4
+        
+        ldx SWCHA	; H 148
+        lda Nyb,x
+        ora SWCHA	; H -56
+        sta YBUF+5
+        
+        ldx SWCHA	; H -35
+        lda Nyb,x
+        ora SWCHA	; H -11
+        sta YBUF+6
+        
+        ldx SWCHA	; H 10
+        lda Nyb,x
+        ora SWCHA	; H 34
+        sta YBUF+7
+        
+        ldx SWCHA	; H 55
+        lda Nyb,x
+        ora SWCHA	; H 79
+        sta YBUF+8
+        
+        ldx SWCHA	; H 100
+        lda Nyb,x
+        ora SWCHA	; H 124
+        sta YBUF+9
+        
+        ldx SWCHA	; H 145
+        lda Nyb,x
+        ora SWCHA	; H -59
+        sta YBUF+10
+        
+        ldx SWCHA	; H -38
+        lda Nyb,x
+        ora SWCHA	; H -14
+        sta YBUF+11
+        
+        ldx SWCHA	; H 7
+        lda Nyb,x
+        ora SWCHA	; H 31
+        sta YBUF+12
+        
+        ldx SWCHA	; H 52
+        lda Nyb,x
+        ora SWCHA	; H 76
+        sta YBUF+13
+        
+        ldx SWCHA	; H 97
+        lda Nyb,x
+        ora SWCHA	; H 121
+        sta YBUF+14
+        
+        ; ready?
+        bvs .odd
+        jmp .even
+        
+        ; ========================================================
+        ; odd field
+        ; ========================================================        
+        ; line 0
+        
+.odd   	
+        ldx SWCHA	; H 151
+        lda Nyb,x
+        ora SWCHA	; H -53
+        sta GRP0
+        
+ 	ldx SWCHA	; H -32
+        lda Nyb,x
+        ora SWCHA	; H -8
+        sta GRP1
+        
+        ldx SWCHA	; H 13
+        lda Nyb,x
+        ora SWCHA	; H 37
+        sta GRP0	; H 49 is clear
+        
+        lda YBUF+0	; H 58
+        sta GRP1	; H 67
+        lda YBUF+1
+        sta GRP0
+        lda YBUF+2
+        sta GRP1	; H 103 (p1 starts at 112)
+        
+        sta.w HMCLR	; move p0,p1 left 8
+
+        ; line 1
+        ldx SWCHA	; H 124
+	lda Nyb,x
+        
+	sta HMOVE	; starts at 70 (H 148), move complete at 73 (H 157)
+     
+        ora SWCHA	; H 157
+        sta GRP0
+        
+ 	ldx SWCHA	; H -50
+        lda Nyb,x
+        ora SWCHA	; H -26
+        sta GRP1
+        
+        ldx SWCHA	; H -5
+        lda Nyb,x
+        ora SWCHA	; H 19
+        
+        ldx #$80
+       	stx HMP0        
+        sta GRP0	; H 46
+
+        lda YBUF+3	; H 55
+        sta GRP1
+        lda YBUF+4
+        sta GRP0
+        lda YBUF+5
+        sta GRP1
+        stx HMP1
+
+        ; line 2
+        ldx SWCHA	; H 118
+        lda Nyb,x
+        ora SWCHA	; H 142
+        sta GRP0
+
+        sta HMOVE	; move both right 8 H -65
+        
+ 	ldx SWCHA	; H -56
+        lda Nyb,x
+        ora SWCHA	; H -32
+        sta GRP1
+        
+        ldx SWCHA	; H -11
+        lda Nyb,x
+        ora SWCHA	; H 13
+        sta HMCLR	; move p0,p1 left 8
+        
+        ldx SWCHA	; H 34   loading GRP0 from next line
+        sta GRP0	; H 46
+       
+        lda YBUF+6	; H 55
+        sta GRP1
+        lda YBUF+7
+        sta GRP0
+        lda YBUF+8
+        sta GRP1
+        sleep 2		; TODO
+
+        lda Nyb,x
+        ora SWCHA	; H 127
+        sta GRP0	; 
+        
+	sta HMOVE	; starts at 70 (H 148), move complete at 73 (H 157)
+
+        ; line 3
+ 	ldx SWCHA	; H 157
+        lda Nyb,x
+        ora SWCHA	; H -47
+        sta.w GRP1
+        
+        ldx SWCHA	; H -23
+        lda Nyb,x
+        ora SWCHA	; H 1
+        
+        ldx #$80
+	stx HMP0
+        stx HMP1
+
+        sleep 3
+        sta GRP0	; H 46
+        
+        lda YBUF+9	; H 55
+        sta GRP1	; 
+        lda YBUF+10
+        sta GRP0
+        lda YBUF+11
+        sta GRP1
+
+        ; line 4
+        ldx SWCHA	; H 109
+        lda Nyb,x
+        ora SWCHA	; H 133
+        
+        sta GRP0
+
+ 	ldx SWCHA	; H 154
+        lda Nyb,x        
+        ora SWCHA	; H -50
+        
+        sta HMOVE	; move both right 8 H -38
+        sta GRP1
+        
+        ldx SWCHA	; H -20
+        lda Nyb,x
+        ora SWCHA	; H 4
+                
+ 	dec Temp
+        bne .not_done
+        jmp .done
+        
+.not_done
+	sleep 2
+        sta GRP0	; H 46
+
+	lda YBUF+12	; H 64
+        sta GRP1
+        lda YBUF+13
+        sta GRP0
+        lda YBUF+14
+        sta GRP1
+        sleep 3
+
+        jmp ._loop
+ 
+        ; ========================================================
+        ; even field
+        ; ========================================================        
+        ; line 0
+        
+.even   
+	ldx SWCHA	; H 157
+	lda Nyb,x
+        ora SWCHA	; H -47
+        sta GRP0	
+        
+ 	ldx SWCHA	; H -26
+        lda Nyb,x
+        ora SWCHA	; H -2
+        sta GRP1
+        
+        ldx SWCHA	; H 19
+        lda Nyb,x
+        ora SWCHA	; H 43
+        sta GRP0
+        
+        lda YBUF+0	; H 64
+        sta GRP1
+        lda YBUF+1
+        sta GRP0
+        lda YBUF+2
+        sta GRP1
+
+	lda #$80	; 
+	sta HMP0
+        sta HMP1
+        
+        ; line 1
+        ldx SWCHA	; H 142
+        lda Nyb,x
+        ora SWCHA	; H -62
+        
+        sta HMOVE	; move both right 8 at  H -50
+        
+        sta GRP0
+ 	ldx SWCHA	; H -32
+        lda Nyb,x
+        ora SWCHA	; H -8
+        sta GRP1
+        
+        ldx SWCHA	; H 13
+        lda Nyb,x
+        ora SWCHA	; H 37
+        sta GRP0	; H 49
+        
+        lda YBUF+3	; H 58
+        sta GRP1
+        lda YBUF+4
+        sta GRP0
+        lda YBUF+5
+        sta GRP1
+        
+        ; line 2
+        ldx SWCHA	; H 112
+	lda Nyb,x
+        
+	sta.w HMCLR	; move p0,p1 left 8
+	sta HMOVE	; starts at 70 (H 148), move complete at 73 (H 157)
+        
+        ora SWCHA	; H 157
+        sta GRP0
+        
+ 	ldx SWCHA	; H -50
+        lda Nyb,x
+        ora SWCHA	; H -26
+        sta GRP1
+        
+        ldx SWCHA	; H -5
+        lda Nyb,x
+        ora SWCHA	; H 19
+        
+      	ldx #$80
+	stx HMP0
+        sta GRP0	; H 46
+
+        lda YBUF+6	; H 55
+        sta GRP1
+        lda YBUF+7
+        sta GRP0
+        lda YBUF+8
+        sta GRP1
+        stx HMP1
+       
+        ; line 3
+        ldx SWCHA	; H 118
+        lda Nyb,x
+        ora SWCHA	; H 142
+        sta GRP0
+
+        sta HMOVE	; move both right 8 H -65
+        
+ 	ldx SWCHA	; H -56
+        lda Nyb,x
+        ora SWCHA	; H -32
+        sta GRP1
+        
+        sta HMCLR	; move p0,p1 left 8
+        
+        ldx SWCHA	; H 4
+        lda Nyb,x
+        ora SWCHA	; H 28
+
+       	ldx SWCHA	; H 34   for next line
+        sta GRP0	; H 46
+
+        lda YBUF+9	; H 55
+        sta GRP1
+        lda YBUF+10
+        sta GRP0
+        lda YBUF+11
+        sta GRP1
+        sleep 2		; TODO
+
+        lda Nyb,x
+        ora SWCHA	; H 127
+        sta GRP0	; 
+        
+	sta HMOVE	; starts at 70 (H 148), move complete at 73 (H 157)
+
+        ; line 4
+ 	ldx SWCHA	; H 157
+        lda Nyb,x
+        ora SWCHA	; H -47
+        sta GRP1
+        
+        ldx SWCHA	; H -26
+        lda Nyb,x
+        ora SWCHA	; H -2
+        
+ 	dec Temp
+        beq .done_even
+        
+        sleep 5		; lots of time here
+        sta GRP0	; H 46
+        lda YBUF+12	; H 55
+        sta GRP1
+        lda YBUF+13
+        sta GRP0
+        lda YBUF+14
+        sta GRP1
+        
+       	sleep 3
+        jmp ._loop
+        
+.done_even	
+        sleep 4		; lots of time here, handle last line
+.done        
+        sta GRP0	; H 46
+        lda YBUF+12	; H 55
+        sta GRP1
+        lda YBUF+13
+        sta GRP0
+        lda YBUF+14
+        sta GRP1
+        
+        lda #0
+	sta WSYNC
+        sta GRP0
+        sta GRP1
+        
+	sta WSYNC	; 262
+	sta WSYNC
+        
+        sta PF1		; 0
+        sta PF2		; 0
+        jmp Next
+        
+;================================================================
+;================================================================
+
+pos_sprite
+	sta Temp
+        ldx #0
+        jsr SetHorizPos
+        lda Temp
+        clc
+        adc #16
+        ldx #1
+        jmp SetHorizPos
+        
+SetHorizPos
+        sta WSYNC   ; start a new line
+        bit 0       ; waste 3 cycles
+        sec         ; set carry flag
+DivideLoop
+        sbc #15     ; subtract 15
+        bcs DivideLoop  ; branch until negative
+        eor #7      ; calculate fine offset
+        asl
+        asl
+        asl
+        asl
+        sta RESP0,x ; fix coarse position
+        sta HMP0,x  ; set fine offset
+        rts         ; return to caller
+
+;================================================================
+;================================================================
+
+SERIAL_MASK	equ 	$01
+READY_MASK	equ 	$02
+I2C_SDA_MASK    equ     $04
+I2C_SCL_MASK    equ     $08
+
+        mac     I2C_SCL_0
+        lda     #$00
+        sta     SWCHA
+        endm
+
+        mac     I2C_SCL_1
+        lda     #I2C_SCL_MASK
+        sta     SWCHA
+        endm
+        
+  ;0280    SWCHA   11111111  Port A; input or output  (read or write)
+  ;0281    SWACNT  11111111  Port A DDR, 0= input, 1=output
+  ;0282    SWCHB   11111111  Port B; console switches (read only)
+  ;0283    SWBCNT  11111111  Port B DDR (hardwired as input)
+
+spi
+	lda #8
+        sta Temp
+.loop2	jsr spi_byte
+	sta BCDScore
+        
+        cmp LastN
+        beq .0
+        inc background
+.0	sta LastN
+	inc LastN
+        
+        dec Temp
+        bne .loop2
+	rts
+        
+spi_byte SUBROUTINE
+        ldx #I2C_SCL_MASK
+        stx SWCHA
+ 	lda #I2C_SCL_MASK|READY_MASK
+        sta SWACNT	; ready=0
+        
+        ldy #1
+        sty Out		; sentinel bit
+        dey		; y = 0
+
+.loop	sty SWCHA	; clk lo
+	lda SWCHA	; data in
+	stx SWCHA	; clk hi
+        lsr
+       	lsr
+       	lsr
+        rol Out	
+        bcc .loop
+        
+        ; return port to input mode
+        sty SWACNT
+        lda Out
+	rts
+        
+        ; 108927 baud
+serial_byte_ SUBROUTINE
+        ldx #0
+	stx SWCHA	; start bit
+	inx		; 1
+	stx SWACNT	; enable d0 output, drive low
+        nop
+        nop
+	ldx #8
+.bit
+	sta SWCHA	; 11 cycles per bit
+	ror
+	dex
+	bne .bit
+        
+	stx SWACNT	; set d0 as input - stop bit
+	rts
+
+        ; 199700 baud
+serial_byte SUBROUTINE
+        ldx #0
+	stx SWCHA	; start bit
+	inx		; 1
+	stx SWACNT	; enable d0 output, drive low
+
+	sta SWCHA	; 6 cycles per bit
+	ror
+	sta SWCHA
+	ror
+        sta SWCHA
+	ror
+        sta SWCHA
+	ror
+        sta SWCHA
+	ror
+        sta SWCHA
+	ror
+        sta SWCHA
+	ror
+        sta SWCHA
+	dex
+        
+	stx SWACNT	; set d0 as input - stop bit
+	rts		; 64 cycles
+        
+; Adds value to 6-BCD-digit score.
+; A = 1st BCD digit
+; X = 2nd BCD digit
+; Y = 3rd BCD digit
+AddScore subroutine
+       ; sed	; enter BCD mode
+        clc	; clear carry
+        sta Temp
+        lda BCDScore
+        adc Temp
+        sta BCDScore
+        stx Temp
+        lda BCDScore+1
+        adc Temp
+        sta BCDScore+1
+        sty Temp
+        lda BCDScore+2
+        adc Temp
+        sta BCDScore+2
+       ; cld	; exit BCD mode
+        rts
+
+GetDigitPtrs subroutine
+	ldx #0	; leftmost bitmap
+        ldy #2	; start from most-sigificant BCD value
+.Loop
+        lda BCDScore,y	; get BCD value
+        and #$f0	; isolate high nibble (* 16)
+        lsr		; shift right 1 bit (* 8)
+        sta Digit0,x	; store pointer lo byte
+        lda #>FontTable
+        sta Digit0+1,x	; store pointer hi byte
+        inx
+        inx		; next bitmap pointer
+        lda BCDScore,y	; get BCD value (again)
+        and #$f		; isolate low nibble
+        asl
+        asl
+        asl		; * 8
+        sta Digit0,x	; store pointer lo byte
+        lda #>FontTable
+        sta Digit0+1,x	; store pointer hi byte
+        inx
+        inx		; next bitmap pointer
+        dey		; next BCD value
+        bpl .Loop	; repeat until < 0
+	rts
+
+; Display the resulting 48x8 bitmap
+; using the Digit0-5 pointers.
+DrawDigits subroutine
+	sta WSYNC
+	SLEEP 40	; start near end of scanline
+        lda #7
+        sta LoopCount
+BigLoop
+	ldy LoopCount	; counts backwards
+        lda (Digit0),y	; load B0 (1st sprite byte)
+        sta GRP0	; B0 -> [GRP0]
+        lda (Digit1),y	; load B1 -> A
+        sta GRP1	; B1 -> [GRP1], B0 -> GRP0
+        sta WSYNC	; sync to next scanline
+        lda (Digit2),y	; load B2 -> A
+        sta GRP0	; B2 -> [GRP0], B1 -> GRP1
+        lda (Digit5),y	; load B5 -> A
+        sta Temp	; B5 -> temp
+        lda (Digit4),y	; load B4
+        tax		; -> X
+        lda (Digit3),y	; load B3 -> A
+        ldy Temp	; load B5 -> Y
+        sta GRP1	; B3 -> [GRP1]; B2 -> GRP0
+        stx GRP0	; B4 -> [GRP0]; B3 -> GRP1
+        sty GRP1	; B5 -> [GRP1]; B4 -> GRP0
+        sta GRP0	; ?? -> [GRP0]; B5 -> GRP1
+        dec LoopCount	; go to next line
+	bpl BigLoop	; repeat until < 0
+        
+        lda #0		; clear the sprite registers
+        sta GRP0
+        sta GRP1
+        sta GRP0
+        sta GRP1
+        rts
+
+; Font table for digits 0-9 (8x8 pixels)
+        align $100 ; make sure data doesn't cross page boundary
+FontTable
+	hex 003c6666766e663c007e181818381818
+        hex 007e60300c06663c003c66061c06663c
+        hex 0006067f661e0e06003c6606067c607e
+        hex 003c66667c60663c00181818180c667e
+        hex 003c66663c66663c003c66063e66663c
+
+        byte %00000000	; A
+        byte %01100110
+        byte %01100110
+        byte %01100110
+        byte %01111110
+        byte %01100110
+        byte %01100110
+        byte %00111100
+
+        byte %00000000	; B
+        byte %01111100
+        byte %01100110
+        byte %01100110
+        byte %01111100
+        byte %01100110
+        byte %01100110
+        byte %01111100
+        
+        byte %00000000	; C
+        byte %00111100
+        byte %01100110
+        byte %01100110
+        byte %01100000
+        byte %01100110
+        byte %01100110
+        byte %00111100
+        
+        byte %00000000	; D
+        byte %01111100
+        byte %01100110
+        byte %01100110
+        byte %01100110
+        byte %01100110
+        byte %01100110
+        byte %01111100
+        
+        byte %00000000	; E
+        byte %01111110
+        byte %01100000
+        byte %01100000
+        byte %01111000
+        byte %01100000
+        byte %01100000
+        byte %01111110
+        
+        byte %00000000	; F
+        byte %01100000
+        byte %01100000
+        byte %01100000
+        byte %01111000
+        byte %01100000
+        byte %01100000
+        byte %01111110
+        
+
+; Epilogue
+	org $fffc
+        .word Start
+        .word Start
